@@ -1,3 +1,5 @@
 SELECT * FROM vnpy.`dbbardata`;
 
-SELECT * FROM vnpy.`dbtickdata`;
+SELECT COUNT(*) FROM vnpy.`dbtickdata`;
+
+SELECT DISTINCT symbol,NAME FROM vnpy.`dbtickdata`;
