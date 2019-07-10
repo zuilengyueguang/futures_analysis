@@ -4,7 +4,6 @@ from vnpy.trader.engine import BaseEngine
 '''
 算法交易代码，完成后，拷贝到algos下面，可以在页面操作运行
 '''
-
 class ArbitrageSimple(AlgoTemplate):
     # 存放策略名称，方便页面展示
     display_name = '简单的套利策略'
