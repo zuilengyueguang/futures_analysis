@@ -48,6 +48,10 @@ class DataEngine():
         # 连接函数
         return pd.concat([d1, d2, d3])
 
+    def getData(self):
+        # 可以得到不同时间 不同频率的所有主力合约数据
+        pass
+
     # 获取所有主力合约信息
     def getAllMainContract(self):
         secs = get_all_securities(types=['futures'])
@@ -202,13 +206,14 @@ def filter_cointegration(ac, data):
     return pairs
 
 
-# 生成分析报告
-def create_report(ac, pairs, data):
-    # 1.
-    pass
+e = datetime.datetime.now()
+end_date = e.strftime('%Y-%m-%d')
+s = e - datetime.timedelta(days=7)
+start_date = s.strftime('%Y-%m-%d')
 
 
-def Main():
+def Main(sec='1s', start_date=start_date, end_date=end_date):
+    # todo 改造为 可以传送频率 时间段 和 具体
     # 获取主力合约基本面数据
     de = DataEngine()
     ac = de.getAllMainContract()
@@ -217,6 +222,7 @@ def Main():
     # 协整检验
     pairs = filter_cointegration(ac, data)
     # 对所有套利对生成策略图
+    # todo 添加导出报表的功能，一天分析一次，然后做各种比较
     create_report(ac, pairs, data)
     print("协整检验完成")
     return ac, pairs, data
