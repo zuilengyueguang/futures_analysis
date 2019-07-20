@@ -200,10 +200,16 @@ def filter_cointegration(ac, data):
             print("套利对：(%s,%s)开始协整检验" % (s1, s2))
             (result, alpha, beta) = se.isCointegration(d1, d2)
             if result:
-                print("套利对为：(%s,%s),alpha:%s,beta:%s"
-                      % (ac.loc[s1, :].display_name, ac.loc[s2, :].display_name, str(alpha), str(beta)))
-                pairs.append((s1, s2, alpha, beta))
-    return pairs
+                alpha = round(alpha + 0.1, 0)  # alpha值进行取整
+                beta = round(beta + 0.001, 2)  # beta值保留两位小数
+                s1_name = ac.loc[s1, :].display_name
+                s2_name = ac.loc[s2, :].display_name
+                print("套利对为：[%s,%s],合约名称:[%s,%s],alpha:%s,beta:%s"
+                      % (s1, s2, s1_name, s2_name, str(alpha), str(beta)))
+                pairs.append((s1, s2, s1_name, s2_name, alpha, beta))
+    pairs_d = DataFrame(pairs, columns=['s1', 's2', 's1_name', 's2_name', 'alpha', 'beta'])
+    pairs_d.index = pairs_d.s1 + '_' + pairs_d.s2
+    return pairs_d
 
 
 e = datetime.datetime.now()
@@ -213,7 +219,7 @@ start_date = s.strftime('%Y-%m-%d')
 
 
 def Main(sec='1s', start_date=start_date, end_date=end_date):
-    # todo 改造为 可以传送频率 时间段 和 具体
+    # 改造为 可以传送频率 时间段 和 具体
     # 获取主力合约基本面数据
     de = DataEngine()
     ac = de.getAllMainContract()
@@ -222,8 +228,7 @@ def Main(sec='1s', start_date=start_date, end_date=end_date):
     # 协整检验
     pairs = filter_cointegration(ac, data)
     # 对所有套利对生成策略图
-    # todo 添加导出报表的功能，一天分析一次，然后做各种比较
-    create_report(ac, pairs, data)
+    # create_report(ac,pairs,data)
     print("协整检验完成")
     return ac, pairs, data
 
