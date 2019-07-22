@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 from pandas import Series, DataFrame
 import matplotlib.pyplot as plt
-from arch.unitroot import ADF
 import statsmodels.api as sm
+import statsmodels.tsa.stattools as st
 import re
 import datetime
 from jqdata import jy
@@ -13,8 +13,8 @@ from numpy import nan
 # 数据引擎
 class DataEngine():
     # 获取tick数据
-    def getTickData(self, symbol, start_dt, end_dt):
-        data = get_ticks(symbol, start_dt=start_dt, end_dt=end_dt,
+    def getTickData(self, symbol, start_date, end_date):
+        data = get_ticks(symbol, start_dt=start_date, end_dt=end_date,
                          fields=['time', 'current', 'volume', 'money', 'position', 'a1_v', 'a1_p', 'b1_v', 'b1_p'])
         df1 = DataFrame(data)
         # 时间标准化，方便后续时间运算
@@ -26,13 +26,17 @@ class DataEngine():
         df1.drop(columns='time', inplace=True)
         return df1
 
+    def getData(self, symbol, start_date, end_date, sec):
+        data = self.getTickData(symbol, start_date=start_date, end_date=end_date)
+        return data
+
     # 取前一周的Tick数据
     def getPreWeekTickData(self, symbol):
         e = datetime.datetime.now()
-        end_dt = e.strftime('%Y-%m-%d')
+        end_date = e.strftime('%Y-%m-%d')
         s = e - datetime.timedelta(days=7)
-        start_dt = s.strftime('%Y-%m-%d')
-        return self.getTickData(symbol, start_dt=start_dt, end_dt=end_dt)
+        start_date = s.strftime('%Y-%m-%d')
+        return self.getTickData(symbol, start_date=start_date, end_date=end_date)
 
     # 获取某个合约的前一周的秒级数据
 
@@ -48,78 +52,33 @@ class DataEngine():
         # 连接函数
         return pd.concat([d1, d2, d3])
 
-    def getData(self):
-        # 可以得到不同时间 不同频率的所有主力合约数据
-        pass
-
     # 获取所有主力合约信息
     def getAllMainContract(self):
         secs = get_all_securities(types=['futures'])
         main_secs = secs[secs.display_name.apply(lambda x: '主力合约' in x)]
         main_secs_code = [get_dominant_future(s[0:-4]) for s in main_secs.name if get_dominant_future(s[0:-4])]
-        return secs.loc[main_secs_code, :]
-
-    # 获取所有主力合约上周的tick数据
-    # 每日执行一次，方便分析数据时，快速加载数据
-    def getPreWeekAllTickData(self):
-        e = datetime.datetime.now()
-        end_dt = e.strftime('%Y-%m-%d')
-        s = e - datetime.timedelta(days=7)
-        start_dt = s.strftime('%Y-%m-%d')
-        codes = self.getAllMainContract()
-        d = {}
-        for i in codes.index:
-            d[i] = self.getTickData(i, start_dt=start_dt, end_dt=end_dt)
-        return pd.Panel(d)
-
-    # 获取某个合约的合约乘数  计数单位 和 最小变动单位
-    # 犯了一个基本错误，忘了写self，报了一堆看不懂的错误，郁闷
-    def future_basic_info(self, future):
-        # 这个后续改成从本地的meta数据中拿metadata数据的方法，暂时先这么使用
-        if "9999" in future or "8888" in future:
-            match = re.match(r"(?P<underlying_symbol>[A-Z]{1,})", future)
-            if not match:
-                raise ValueError("未知期货标的：{}".format(future))
-            else:
-                future = get_dominant_future(match.groupdict()["underlying_symbol"])
-        code = future.split(".")[0]
-        q = query(jy.Fut_ContractMain).filter(jy.Fut_ContractMain.ContractCode == code)
-        result = jy.run_query(query_object=q).to_dict("record")
-        if result:
-            result = result.pop()
-            min_point = re.match("(?P<value>^[0-9]+([.]{1}[0-9]+){0,1})", result["LittlestChangeUnit"]).groupdict(nan)[
-                "value"]
-            return {"ContractUnit": result["CMValue"],
-                    "PriceScale": float(str(min_point)[:-1] + "1") if float(min_point) < 1 else 1,
-                    "MinPoint": float(min_point)}
-        else:
-            cu = nan
-            current_code = code[:-4].upper()
-            if trade_units.get(current_code):
-                cu = trade_units.get(current_code)
-            return {"ContractUnit": cu,
-                    "PriceScale": nan,
-                    "MinPoint": nan}
+        ac = secs.loc[main_secs_code, :]
+        ac['code'] = ac.index
+        ac.code = ac.code.apply(lambda s: str(s[0:-9]).upper())
+        ac = ac[ac.code.apply(lambda s: s not in suit_futures)]  # 过滤掉期货特定品种
+        ac = ac[ac.code.apply(lambda s: s not in error_futures)]  # 过滤掉有问题合约
+        return ac
 
     # 查询交易单位，输入参数为合约的代码 比如RU1909.XSGE合约，这里输入RU
     def get_trade_units(self, symbol):
         code = symbol.split(".")[0][:-4].upper()
         return trade_units.get(code)
 
-    # 绘制时间序列数据图，过滤掉中间空白情况
-    def plot(self, dataSeries):
-        pass
-
 
 # 计算引擎
 class StatisEngine():
     def integration(self, priceX):
-        # 一阶单整计算
-        logX = priceX
+        # 一阶单整计算  一节单整检验还是用对数价格
+        logX = np.log(priceX)
         retX = logX.diff()[1:]
-        adfLX = ADF(logX)
-        adfRX = ADF(retX)
-        return adfLX.pvalue, adfRX.pvalue
+        adfLX = st.adfuller(logX)
+        adfRX = st.adfuller(retX)
+        return adfLX[1], adfRX[1]
 
     # 判断数据是否为一阶单整序列
     def isIntegration(self, priceX):
@@ -137,12 +96,13 @@ class StatisEngine():
 
     # 判断两个序列是否有协整效应
     def isCointegration(self, priceX, priceY):
+        # 协整检验用真实数据
         logX = priceX
         logY = priceY
         results = sm.OLS(logY, sm.add_constant(logX)).fit()
         resid = results.resid
-        adfSpread = ADF(resid)
-        if adfSpread.pvalue >= 0.05:
+        adfSpread = st.adfuller(resid)
+        if adfSpread[1] >= 0.05:
             # 残差序列是非平稳时间序列，不具有协整关系
             return (False, results.params[0], results.params[1])
         else:
@@ -233,8 +193,10 @@ def Main(sec='1s', start_date=start_date, end_date=end_date):
     return ac, pairs, data
 
 
-# 目前有问题的合约和无法交易的合约
-error_stocks = ['JR2005.XZCE', 'IC1907.CCFX', 'IF1907.CCFX', 'IH1907.CCFX', 'T1909.CCFX', 'TF1909.CCFX', 'TS1909.CCFX']
+# 适当性品种，这些品种目前无法交易,需要额外申请
+suit_futures = ['IC', 'IF', 'IH', 'T', 'TF', 'TS', 'I', 'SC', 'TA']
+# 目前有问题的合约，粳稻期货目前无人参与交易，一条数据都没有
+error_futures = ['JR']
 # 合约代码和交易单位数据，暂时存放在这里
 trade_units = {'AP': 10, 'CF': 5, 'CJ': 5, 'CY': 5, 'FG': 20, 'JR': 20, 'LR': 20, 'MA': 10, 'OI': 10, 'PM': 50,
                'RI': 20, 'RM': 10,
