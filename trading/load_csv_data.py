@@ -1,24 +1,28 @@
 from vnpy.trader.database.initialize import init
-from vnpy.trader.object import TickData
-from vnpy.trader.constant import Exchange
+from vnpy.trader.object import TickData,BarData
+from vnpy.trader.constant import Exchange,Interval
 import csv
 import codecs
 from datetime import datetime
 
-
 class LoadCsvData:
-    def save(self, ticks):
+    def __init__(self):
         setting = {
-            "driver": "mysql",
+            "driver": "mongodb",
             "database": "vnpy",
             "host": "localhost",
-            "port": 3306,
+            "port": 27017,
             "user": "root",
             "password": "123456",
-            "authentication_source": "admin"
+            "authentication_source": "vnpy"
         }
-        dm = init(setting)
-        dm.save_tick_data(ticks)
+        self.dm = init(setting)
+
+    def save_ticks(self, ticks):
+        self.dm.save_tick_data(ticks)
+
+    def save_bars(self, bars):
+        self.dm.save_bar_data(bars)
 
     def covertf(self, value):
         try:
@@ -26,7 +30,7 @@ class LoadCsvData:
         except :
             return 0.0
 
-    def load(self, csv_path):
+    def load_ticks(self, csv_path: str):
         ticks = []
         with codecs.open(csv_path, "r", "utf-8") as f:
             reader = csv.DictReader(f)
@@ -51,16 +55,42 @@ class LoadCsvData:
                     ask_price_1=self.covertf(item['ask_price_1']),
                     bid_volume_1=self.covertf(item['bid_volume_1']),
                     ask_volume_1=self.covertf(item['ask_volume_1']),
-                    gateway_name="DB"
+                    gateway_name="JQ"
                 )
                 ticks.append(tick)
         return ticks
 
+    def load_bars(self, csv_path: str):
+        bars = []
+        with codecs.open(csv_path, "r", "utf-8") as f:
+            reader = csv.DictReader(f)
+            for item in reader:
+                dt = datetime.strptime(item['datetime'], '%Y-%m-%d %H:%M:%S')
+                bar = BarData(
+                    symbol=item['symbol'],
+                    exchange=Exchange(item['exchange']),
+                    datetime=dt,
+                    interval=Interval.MINUTE,
+                    volume=self.covertf(item['volume']),
+                    open_interest=0.0,
+                    open_price=self.covertf(item['open']),
+                    high_price=self.covertf(item['high']),
+                    low_price=self.covertf(item['low']),
+                    close_price=self.covertf(item['close']),
+                    gateway_name="JQ"
+                )
+                bars.append(bar)
+        return bars
+
+    def one(self, symbol: str, exchange: str):
+        ex = Exchange(exchange)
+        self.dm.get_newest_tick_data(symbol, ex)
+
 
 if __name__ == '__main__':
     ls = LoadCsvData()
-    #data = ls.load(csv_path="D://workspace//data//rb1910_20181016_20190723_1S.csv")
-    #ls.save(ticks=data)
+    data = ls.load_bars("D://workspace//data//SR909_20180315_20190726_1M.csv")
+    ls.save_bars(data)
 
 
 
